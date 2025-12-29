@@ -45,6 +45,7 @@ def process_frame(frame, model, confidence_threshold):
     # Placeholder for now
     return frame, []
 
+# TODO: break this into a class with separate methods
 def main():
     """Main function to process video and identify edge puzzle pieces."""
     args = parse_arguments()
