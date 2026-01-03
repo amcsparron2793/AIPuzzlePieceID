@@ -45,6 +45,81 @@ def process_frame(frame, model, confidence_threshold):
     # Placeholder for now
     return frame, []
 
+
+class VideoCapture:
+    def __init__(self, video_path, output_file):
+        self.output_file = output_file
+        self.video_path = video_path
+        self.frame_count = 0
+        self.start_time = None
+        self.confidence = None
+        self.model = None
+
+        if not self.video_path.exists():
+            raise AttributeError(f"Error: Video file '{self.video_path}' not found.")
+
+        self.cap = self.open_video_file()
+
+        (self.frame_width,
+         self.frame_height,
+         self.fps) = self.get_video_properties()
+
+        self.video_out_writer = self.create_video_output_writer()
+
+    def open_video_file(self):
+        # Open the video file
+        cap = cv2.VideoCapture(str(self.video_path))
+        if not cap.isOpened():
+            raise AttributeError(f"Error: Could not open video file '{self.video_path}'.")
+        return cap
+
+    def get_video_properties(self):
+        # Get video properties
+        frame_width = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        frame_height = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        fps = self.cap.get(cv2.CAP_PROP_FPS)
+        return frame_width, frame_height, fps
+
+    def create_video_output_writer(self):
+        # Create output video writer
+        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+        out = cv2.VideoWriter(self.output_file, fourcc, self.fps,
+                              (self.frame_width, self.frame_height))
+        return out
+
+    def _release_resources(self):
+        # Release resources
+        self.cap.release()
+        self.video_out_writer.release()
+        print(f"Processing complete. Output saved to {self.output_file}")
+
+    def process_frames(self):
+        # Process each frame
+        self.frame_count = 0
+        self.start_time = time.time()
+
+        while self.cap.isOpened():
+            self._process_frame()
+        self._release_resources()
+
+    def _process_frame(self):
+        ret, frame = self.cap.read()
+        if not ret:
+            return
+
+        # Process the frame
+        processed_frame, detections = process_frame(frame, self.model, self.confidence)
+
+        # Write the frame to output video
+        self.video_out_writer.write(processed_frame)
+
+        # Display progress
+        self.frame_count += 1
+        if self.frame_count % 100 == 0:
+            elapsed_time = time.time() - self.start_time
+            fps = self.frame_count / elapsed_time
+            print(f"Processed {self.frame_count} frames. FPS: {fps:.2f}")
+
 # TODO: break this into a class with separate methods
 def main():
     """Main function to process video and identify edge puzzle pieces."""
@@ -52,54 +127,8 @@ def main():
     
     # Check if video file exists
     video_path = Path(args.video)
-    if not video_path.exists():
-        print(f"Error: Video file '{args.video}' not found.")
-        return
-    
+
     # TODO: Load the AI model
     model = None  # This would be replaced with actual model loading code
-    
-    # Open the video file
-    cap = cv2.VideoCapture(str(video_path))
-    if not cap.isOpened():
-        print(f"Error: Could not open video file '{args.video}'.")
-        return
-    
-    # Get video properties
-    frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-    frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    fps = cap.get(cv2.CAP_PROP_FPS)
-    
-    # Create output video writer
-    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-    out = cv2.VideoWriter(args.output, fourcc, fps, (frame_width, frame_height))
-    
-    # Process each frame
-    frame_count = 0
-    start_time = time.time()
-    
-    while cap.isOpened():
-        ret, frame = cap.read()
-        if not ret:
-            break
-            
-        # Process the frame
-        processed_frame, detections = process_frame(frame, model, args.confidence)
-        
-        # Write the frame to output video
-        out.write(processed_frame)
-        
-        # Display progress
-        frame_count += 1
-        if frame_count % 100 == 0:
-            elapsed_time = time.time() - start_time
-            fps = frame_count / elapsed_time
-            print(f"Processed {frame_count} frames. FPS: {fps:.2f}")
-    
-    # Release resources
-    cap.release()
-    out.release()
-    print(f"Processing complete. Output saved to {args.output}")
-
 if __name__ == "__main__":
     main()
