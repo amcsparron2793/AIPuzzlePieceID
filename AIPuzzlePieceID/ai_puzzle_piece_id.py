@@ -89,8 +89,28 @@ class VideoCapture:
 
     # noinspection PyAbstractClass
     @abstractmethod
+    def ai_process_frame(self, frame):
+        ...
+
     def _process_frame(self):
-        pass
+        ret, frame = self.cap.read()
+        if not ret:
+            return
+
+        # Process the frame
+        processed_frame, detections = self.ai_process_frame(frame)
+        self._write_and_show_progress(processed_frame)
+
+    def _write_and_show_progress(self, processed_frame):
+        # Write the frame to output video
+        self.video_out_writer.write(processed_frame)
+
+        # Display progress
+        self.frame_count += 1
+        if self.frame_count % 100 == 0:
+            elapsed_time = time.time() - self.start_time
+            fps = self.frame_count / elapsed_time
+            print(f"Processed {self.frame_count} frames. FPS: {fps:.2f}")
 
 
 class PuzzlePieceDetector(VideoCapture):
@@ -160,6 +180,7 @@ class PuzzlePieceDetector(VideoCapture):
             cv2.putText(annotated_frame, f"Edge: {conf:.2f}", (x1, y1 - 10),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
         return annotated_frame
+
     def ai_process_frame(self, frame):
         """
         Process a single frame to identify puzzle pieces.
@@ -179,24 +200,8 @@ class PuzzlePieceDetector(VideoCapture):
         return annotated_frame, results
 
     def _process_frame(self):
-        ret, frame = self.cap.read()
-        if not ret:
-            return
-
-        # Process the frame
-        processed_frame, detections = self.ai_process_frame(frame)
-
-        # Write the frame to output video
-        self.video_out_writer.write(processed_frame)
-
-        # Display progress
-        self.frame_count += 1
-        if self.frame_count % 100 == 0:
-            elapsed_time = time.time() - self.start_time
-            fps = self.frame_count / elapsed_time
-            print(f"Processed {self.frame_count} frames. FPS: {fps:.2f}")
-
-# TODO: break this into a class with separate methods
+        super()._process_frame()
+        # FIXME: Add a break condition to stop processing when desired number of frames is processed
 def main():
     """Main function to process video and identify edge puzzle pieces."""
     args = parse_arguments()
