@@ -10,7 +10,14 @@ import cv2
 import numpy as np
 import argparse
 import time
+import os
 from pathlib import Path
+
+# Try to import tensorflow for model loading and inference
+try:
+    import tensorflow as tf
+except ImportError:
+    tf = None
 
 from _version import __version__
 
@@ -90,8 +97,69 @@ class PuzzlePieceDetector(VideoCapture):
     def __init__(self, model, confidence, video_path, output_file):
         super().__init__(video_path, output_file)
         self.model = model
+        if isinstance(self.model, (str, Path)):
+            self.model = self.load_model(self.model)
         self.confidence = confidence
 
+    @staticmethod
+    def load_model(model_path):
+        return tf.keras.models.load_model(model_path)
+
+    @staticmethod
+    def preprocess_frame(frame):
+        # 1. Preprocessing the frame (resize, normalize, etc.)
+        # Assuming model expects 640x640 input
+        input_size = (640, 640)
+        resized_frame = cv2.resize(frame, input_size)
+        return resized_frame.astype(np.float32) / 255.0
+
+    def run_inference(self, normalized_frame):
+        # 2. Running inference with the model
+        detections = []
+        if self.model is not None:
+            # Expand dimensions to create a batch of 1
+            input_tensor = np.expand_dims(normalized_frame, axis=0)
+
+            # Run inference
+            if hasattr(self.model, 'predict'):
+                detections = self.model.predict(input_tensor, verbose=0)
+                # Keras model.predict usually returns a batch. We take the first one.
+                if len(detections.shape) > 2:
+                    detections = detections[0]
+            elif callable(self.model):
+                # For some model types (like TensorFlow SavedModel)
+                detections = self.model(input_tensor)
+                if isinstance(detections, tf.Tensor):
+                    detections = detections.numpy()
+                if len(detections.shape) > 2:
+                    detections = detections[0]
+        return detections
+
+    def postprocess_frame(self, detections):
+        # 3. Post-processing results (filtering by confidence, etc.)
+        # Placeholder detections for demonstration if no model is present
+        # format: [x, y, w, h, confidence]
+        results = []
+        for det in detections:
+            confidence = det[4]
+            if confidence > self.confidence:
+                results.append(det)
+        return results
+
+    def annotate_results(self, frame, results):
+        # 4. Annotating the frame with detections
+        annotated_frame = frame.copy()
+        h, w, _ = frame.shape
+        for res in results:
+            x, y, rw, rh, conf = res
+            # Scale coordinates back to original frame size
+            x1, y1 = int(x * w), int(y * h)
+            x2, y2 = int((x + rw) * w), int((y + rh) * h)
+
+            cv2.rectangle(annotated_frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+            cv2.putText(annotated_frame, f"Edge: {conf:.2f}", (x1, y1 - 10),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+        return annotated_frame
     def ai_process_frame(self, frame):
         """
         Process a single frame to identify puzzle pieces.
@@ -103,40 +171,10 @@ class PuzzlePieceDetector(VideoCapture):
             Processed frame with annotations
             List of detected edge pieces coordinates
         """
-        # 1. Preprocessing the frame (resize, normalize, etc.)
-        # Assuming model expects 640x640 input
-        input_size = (640, 640)
-        resized_frame = cv2.resize(frame, input_size)
-        normalized_frame = resized_frame.astype(np.float32) / 255.0
-        
-        # 2. Running inference with the model
-        detections = []
-        if self.model is not None and hasattr(self.model, 'predict'):
-            # This is a placeholder for actual model inference
-            # For example: detections = self.model.predict(np.expand_dims(normalized_frame, axis=0))
-            pass
-        
-        # 3. Post-processing results (filtering by confidence, etc.)
-        # Placeholder detections for demonstration if no model is present
-        # format: [x, y, w, h, confidence]
-        results = []
-        for det in detections:
-            confidence = det[4]
-            if confidence > self.confidence:
-                results.append(det)
-
-        # 4. Annotating the frame with detections
-        annotated_frame = frame.copy()
-        h, w, _ = frame.shape
-        for res in results:
-            x, y, rw, rh, conf = res
-            # Scale coordinates back to original frame size
-            x1, y1 = int(x * w), int(y * h)
-            x2, y2 = int((x + rw) * w), int((y + rh) * h)
-            
-            cv2.rectangle(annotated_frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
-            cv2.putText(annotated_frame, f"Edge: {conf:.2f}", (x1, y1 - 10),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+        normalized_frame = self.preprocess_frame(frame)
+        detections = self.run_inference(normalized_frame)
+        results = self.postprocess_frame(detections)
+        annotated_frame = self.annotate_results(frame, results)
 
         return annotated_frame, results
 
@@ -166,10 +204,9 @@ def main():
     # Check if video file exists
     video_path = Path(args.video)
 
-    # TODO: Load the AI model
-    model = None  # This would be replaced with actual model loading code
 if __name__ == "__main__":
-    PPD = PuzzlePieceDetector(model='',confidence=0.5,
+    PPD = PuzzlePieceDetector(model=Path('../Misc_Project_Files/dummy_model.keras'),
+                              confidence=0.5,
                               video_path=Path('../Misc_Project_Files/TestVideo2.mp4'),
                               output_file=Path('../Misc_Project_Files/output.mp4'))
     PPD.process_frames()
