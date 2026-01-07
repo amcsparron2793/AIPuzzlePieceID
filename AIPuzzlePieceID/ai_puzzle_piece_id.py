@@ -23,29 +23,6 @@ def parse_arguments():
     parser.add_argument('--confidence', type=float, default=0.5, help='Minimum confidence threshold for detection.')
     return parser.parse_args()
 
-def process_frame(frame, model, confidence_threshold):
-    """
-    Process a single frame to identify puzzle pieces.
-    
-    Args:
-        frame: Input video frame
-        model: Loaded AI model
-        confidence_threshold: Minimum confidence score to consider a detection
-        
-    Returns:
-        Processed frame with annotations
-        List of detected edge pieces coordinates
-    """
-    # TODO: Implement frame processing logic using the AI model
-    # This would include:
-    # 1. Preprocessing the frame (resize, normalize, etc.)
-    # 2. Running inference with the model
-    # 3. Post-processing results (filtering by confidence, etc.)
-    # 4. Annotating the frame with detections
-    
-    # Placeholder for now
-    return frame, []
-
 
 class VideoCapture:
     def __init__(self, video_path, output_file):
@@ -121,22 +98,47 @@ class PuzzlePieceDetector(VideoCapture):
 
         Args:
             frame: Input video frame
-            model: Loaded AI model
-            confidence_threshold: Minimum confidence score to consider a detection
 
         Returns:
             Processed frame with annotations
             List of detected edge pieces coordinates
         """
-        # TODO: Implement frame processing logic using the AI model
-        # This would include:
         # 1. Preprocessing the frame (resize, normalize, etc.)
+        # Assuming model expects 640x640 input
+        input_size = (640, 640)
+        resized_frame = cv2.resize(frame, input_size)
+        normalized_frame = resized_frame.astype(np.float32) / 255.0
+        
         # 2. Running inference with the model
+        detections = []
+        if self.model is not None and hasattr(self.model, 'predict'):
+            # This is a placeholder for actual model inference
+            # For example: detections = self.model.predict(np.expand_dims(normalized_frame, axis=0))
+            pass
+        
         # 3. Post-processing results (filtering by confidence, etc.)
-        # 4. Annotating the frame with detections
+        # Placeholder detections for demonstration if no model is present
+        # format: [x, y, w, h, confidence]
+        results = []
+        for det in detections:
+            confidence = det[4]
+            if confidence > self.confidence:
+                results.append(det)
 
-        # Placeholder for now
-        return frame, []
+        # 4. Annotating the frame with detections
+        annotated_frame = frame.copy()
+        h, w, _ = frame.shape
+        for res in results:
+            x, y, rw, rh, conf = res
+            # Scale coordinates back to original frame size
+            x1, y1 = int(x * w), int(y * h)
+            x2, y2 = int((x + rw) * w), int((y + rh) * h)
+            
+            cv2.rectangle(annotated_frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+            cv2.putText(annotated_frame, f"Edge: {conf:.2f}", (x1, y1 - 10),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+
+        return annotated_frame, results
 
     def _process_frame(self):
         ret, frame = self.cap.read()
