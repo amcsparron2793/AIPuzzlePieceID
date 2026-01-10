@@ -39,6 +39,8 @@ class VideoCapture:
         self.start_time = None
         self.confidence = None
         self.model = None
+        self.max_frames = None
+
 
         if not self.video_path.exists():
             raise AttributeError(f"Error: Video file '{self.video_path}' not found.")
@@ -84,7 +86,9 @@ class VideoCapture:
         self.start_time = time.time()
 
         while self.cap.isOpened():
-            self._process_frame()
+            if not self._process_frame():
+                break
+            #self._process_frame()
         self._release_resources()
 
     # noinspection PyAbstractClass
@@ -95,11 +99,18 @@ class VideoCapture:
     def _process_frame(self):
         ret, frame = self.cap.read()
         if not ret:
-            return
+            return False
 
         # Process the frame
         processed_frame, detections = self.ai_process_frame(frame)
         self._write_and_show_progress(processed_frame)
+
+        # Check if we've reached the maximum number of frames to process
+        if self.max_frames is not None and self.frame_count >= self.max_frames:
+            print(f"Reached maximum frame limit ({self.max_frames}). Stopping processing.")
+            return False
+
+        return True
 
     def _write_and_show_progress(self, processed_frame):
         # Write the frame to output video
@@ -114,12 +125,13 @@ class VideoCapture:
 
 
 class PuzzlePieceDetector(VideoCapture):
-    def __init__(self, model, confidence, video_path, output_file):
+    def __init__(self, model, confidence, video_path, output_file, max_frames=None):
         super().__init__(video_path, output_file)
         self.model = model
         if isinstance(self.model, (str, Path)):
             self.model = self.load_model(self.model)
         self.confidence = confidence
+        self.max_frames = max_frames
 
     @staticmethod
     def load_model(model_path):
@@ -166,7 +178,8 @@ class PuzzlePieceDetector(VideoCapture):
                 results.append(det)
         return results
 
-    def annotate_results(self, frame, results):
+    @staticmethod
+    def annotate_results(frame, results):
         # 4. Annotating the frame with detections
         annotated_frame = frame.copy()
         h, w, _ = frame.shape
@@ -200,8 +213,9 @@ class PuzzlePieceDetector(VideoCapture):
         return annotated_frame, results
 
     def _process_frame(self):
-        super()._process_frame()
-        # FIXME: Add a break condition to stop processing when desired number of frames is processed
+        return super()._process_frame()
+
+
 def main():
     """Main function to process video and identify edge puzzle pieces."""
     args = parse_arguments()
@@ -213,6 +227,7 @@ if __name__ == "__main__":
     PPD = PuzzlePieceDetector(model=Path('../Misc_Project_Files/dummy_model.keras'),
                               confidence=0.5,
                               video_path=Path('../Misc_Project_Files/TestVideo2.mp4'),
-                              output_file=Path('../Misc_Project_Files/output.mp4'))
+                              output_file=Path('../Misc_Project_Files/output.mp4'),
+                              max_frames=500)
     PPD.process_frames()
     #main()
