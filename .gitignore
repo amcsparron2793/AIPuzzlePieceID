@@ -5,4 +5,5 @@ __pycache__
 /dist/
 /*.egg-info/
 *.mp4
+*.jpg
 /DummyModel/test_data/
