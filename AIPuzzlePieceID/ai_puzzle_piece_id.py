@@ -37,11 +37,7 @@ class VideoCapture:
         self.video_path = video_path
         self.frame_count = 0
         self.start_time = None
-        self.confidence = None
-        self.model = None
         self.max_frames = None
-
-        self._validate_file_paths()
 
         self.cap = self.open_video_file()
 
@@ -108,6 +104,7 @@ class VideoCapture:
     def _process_frame(self):
         ret, frame = self._get_ret_and_frame()
         if not ret:
+            print("No more frames in the video.")
             return False
 
         # Process the frame
@@ -135,10 +132,6 @@ class VideoCapture:
 class PuzzlePieceDetectorBase(ABC):#(VideoCapture):
     def __init__(self, model, output_file, confidence, **kwargs):
         self.output_file = output_file
-        if issubclass(self.__class__, VideoCapture):
-            self.max_frames = kwargs.get('max_frames', None)
-            super().__init__(kwargs.get('video_path'), self.output_file)
-
         self.model = model
         self.confidence = confidence
 
@@ -238,8 +231,13 @@ class PuzzlePieceDetectorBase(ABC):#(VideoCapture):
 
 
 class PuzzlePieceDetectorVideo(PuzzlePieceDetectorBase, VideoCapture):
+    def __init__(self, model, output_file, confidence, video_path, **kwargs):
+        # Call both parent class initializers
+        VideoCapture.__init__(self, video_path, output_file, **kwargs)
+        PuzzlePieceDetectorBase.__init__(self, model, output_file, confidence, **kwargs)
+
     def _process_frame(self):
-        return super()._process_frame()
+        return VideoCapture._process_frame(self)
 
 
 def main():
@@ -252,8 +250,8 @@ def main():
 if __name__ == "__main__":
     PPD = PuzzlePieceDetectorVideo(model=Path('../Misc_Project_Files/dummy_model.keras'),
                               confidence=0.5,
-                              #video_path=Path('../Misc_Project_Files/TestVideo2.mp4'),
-                              output_file=Path('../Misc_Project_Files/output.mp4')),
-                              #max_frames=500)
+                              video_path=Path('../Misc_Project_Files/TestVideo2.mp4'),
+                              output_file=Path('../Misc_Project_Files/output.mp4'),
+                              max_frames=500)
     PPD.process_frames()
     #main()
