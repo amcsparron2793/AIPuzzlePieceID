@@ -103,7 +103,27 @@ class SyntheticDataGenerator:
         #x_center, y_center, width, height = self._normalize_coordinates(x, w, h, y_pos)
         return self._normalize_coordinates(x, w, h, y_pos), is_edge, confidence
 
-    def create_synthetic_data(self, num_samples=100, img_size=640):
+    def _create_pieces(self, num_pieces: int, img):
+        for _ in range(num_pieces):
+            coordinates, is_edge, confidence = self._create_and_normalize_piece(img)
+            # split coordinates into x_center, y_center, width, height
+            x_center, y_center, width, height = coordinates
+            self.detections.append([x_center, y_center, width, height, confidence])
+
+    def _post_proc_detections(self):
+        # Ensure we have exactly 10 detections (padding with zeros if needed)
+        while len(self.detections) < 10:
+            self.detections.append([0, 0, 0, 0, 0])  # Zero-padding for unused detections
+
+        # Take only first 10 if we have more
+        self.detections = self.detections[:10]
+
+    def _convert_images_and_labels_to_np_arrays(self):
+        # Convert to numpy arrays
+        self.images = np.array(self.images, dtype=np.float32) / 255.0  # Normalize to [0, 1]
+        self.labels = np.array(self.labels, dtype=np.float32)
+
+    def create_synthetic_data(self):
         """
         Create synthetic data for training the dummy model.
 
@@ -111,30 +131,19 @@ class SyntheticDataGenerator:
         (represented as rectangles) and their corresponding labels.
         """
 
-        for _ in range(num_samples):
+        for _ in range(self.num_samples):
             self.detections = []
             img, num_pieces = self._create_img()
 
-            for _ in range(num_pieces):
-                coordinates, is_edge, confidence = self._create_and_normalize_piece(img)
-                # split coordinates into x_center, y_center, width, height
-                x_center, y_center, width, height = coordinates
-                self.detections.append([x_center, y_center, width, height, confidence])
+            self._create_pieces(num_pieces, img)
 
-            # Ensure we have exactly 10 detections (padding with zeros if needed)
-            while len(self.detections) < 10:
-                self.detections.append([0, 0, 0, 0, 0])  # Zero-padding for unused detections
-
-            # Take only first 10 if we have more
-            self.detections = self.detections[:10]
+            self._post_proc_detections()
 
             # Add to datasets
             self.images.append(img)
             self.labels.append(self.detections)
 
-        # Convert to numpy arrays
-        self.images = np.array(self.images, dtype=np.float32) / 255.0  # Normalize to [0, 1]
-        self.labels = np.array(self.labels, dtype=np.float32)
+        self._convert_images_and_labels_to_np_arrays()
 
 
 def create_model(input_shape=(640, 640, 3)):
@@ -225,8 +234,8 @@ def main():
     # Train the model
     print(f"Training model for {args.epochs} epochs...")
     history = model.fit(
-        X_train, y_train,
-        validation_data=(X_val, y_val),
+        x_train, y_train,
+        validation_data=(x_val, y_val),
         epochs=args.epochs,
         batch_size=args.batch_size,
         verbose=1
