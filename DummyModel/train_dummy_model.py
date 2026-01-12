@@ -35,6 +35,7 @@ class SyntheticDataGenerator:
         self.img_size = img_size
         self.images = []
         self.labels = []  # detections
+        self.detections = []
 
     def _create_img(self):
         # Create a blank image
@@ -66,7 +67,7 @@ class SyntheticDataGenerator:
     @staticmethod
     def _get_edge_and_confidence():
         # Determine if it's an edge piece (just for simulation)
-        is_edge = random.random() > 0.5  # 50% chance of being edge piece
+        is_edge = random.random() > 0.5  # 50% chance of being an edge piece
         confidence = random.uniform(0.7, 0.99) if is_edge else random.uniform(0.3, 0.6)
         return is_edge, confidence
 
@@ -109,29 +110,27 @@ class SyntheticDataGenerator:
         This function generates random images with random "puzzle pieces"
         (represented as rectangles) and their corresponding labels.
         """
-        X = []  # Images
-        y = []  # Labels (detections)
 
         for _ in range(num_samples):
-            detections = []
+            self.detections = []
             img, num_pieces = self._create_img()
 
             for _ in range(num_pieces):
                 coordinates, is_edge, confidence = self._create_and_normalize_piece(img)
                 # split coordinates into x_center, y_center, width, height
                 x_center, y_center, width, height = coordinates
-                detections.append([x_center, y_center, width, height, confidence])
+                self.detections.append([x_center, y_center, width, height, confidence])
 
             # Ensure we have exactly 10 detections (padding with zeros if needed)
-            while len(detections) < 10:
-                detections.append([0, 0, 0, 0, 0])  # Zero-padding for unused detections
+            while len(self.detections) < 10:
+                self.detections.append([0, 0, 0, 0, 0])  # Zero-padding for unused detections
 
             # Take only first 10 if we have more
-            detections = detections[:10]
+            self.detections = self.detections[:10]
 
             # Add to datasets
             self.images.append(img)
-            self.labels.append(detections)
+            self.labels.append(self.detections)
 
         # Convert to numpy arrays
         self.images = np.array(self.images, dtype=np.float32) / 255.0  # Normalize to [0, 1]
@@ -208,11 +207,15 @@ def main():
     args = parse_arguments()
 
     print("Creating synthetic training data...")
-    X_train, y_train = create_synthetic_data(num_samples=200)
-    X_val, y_val = create_synthetic_data(num_samples=50)
+    t_generator = SyntheticDataGenerator(num_samples=200)
+    v_generator = SyntheticDataGenerator(num_samples=50)
+    t_generator.create_synthetic_data()
+    v_generator.create_synthetic_data()
+    x_train, y_train = t_generator.images, t_generator.labels
+    x_val, y_val = v_generator.images, v_generator.labels
 
-    print(f"Training data shape: {X_train.shape}, {y_train.shape}")
-    print(f"Validation data shape: {X_val.shape}, {y_val.shape}")
+    print(f"Training data shape: {x_train.shape}, {y_train.shape}")
+    print(f"Validation data shape: {x_val.shape}, {y_val.shape}")
 
     # Create and compile the model
     print("Creating model...")
