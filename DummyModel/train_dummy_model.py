@@ -145,29 +145,41 @@ class SyntheticDataGenerator:
 
         self._convert_images_and_labels_to_np_arrays()
 
+class CreateAndTrainModel:
+    def __init__(self, input_shape=(640, 640, 3)):
+        self.input_shape = input_shape
+        self.activation_2D = 'relu'
+        self.activation_dense = 'sigmoid'
+        self.padding_2D = 'same'
+        self.kernel_size_2D = (3, 3)
+        self.max_pool_2D = (2, 2)
+        self.filters = 16
 
-def create_model(input_shape=(640, 640, 3)):
-    """Create the model architecture."""
-    model = models.Sequential([
-        layers.Input(shape=input_shape),
-        layers.Conv2D(16, (3, 3), activation='relu', padding='same'),
-        layers.MaxPooling2D((2, 2)),
-        layers.Conv2D(32, (3, 3), activation='relu', padding='same'),
-        layers.MaxPooling2D((2, 2)),
-        layers.Conv2D(64, (3, 3), activation='relu', padding='same'),
-        layers.GlobalAveragePooling2D(),
-        # Output layer: 10 detections with 5 values each
-        layers.Dense(10 * 5, activation='sigmoid'),
-        layers.Reshape((10, 5))
-    ])
+    def create_model(self):
+        """Create the model architecture."""
+        activation_and_padding_2d = {'kernel':self.kernel_size_2D,
+                                     'activation': self.activation_2D,
+                                     'padding': self.padding_2D}
+        model = models.Sequential([
+            layers.Input(shape=self.input_shape),
+            layers.Conv2D(self.filters, **activation_and_padding_2d),
+            layers.MaxPooling2D(self.max_pool_2D),
+            layers.Conv2D(self.filters * 2, **activation_and_padding_2d),
+            layers.MaxPooling2D(self.max_pool_2D),
+            layers.Conv2D(self.filters * 4, **activation_and_padding_2d),
+            layers.GlobalAveragePooling2D(),
+            # Output layer: 10 detections with 5 values each
+            layers.Dense(10 * 5, activation=self.activation_dense),
+            layers.Reshape((10, 5))
+        ])
 
-    model.compile(
-        optimizer='adam',
-        loss='mse',
-        metrics=['accuracy']
-    )
+        model.compile(
+            optimizer='adam',
+            loss='mse',
+            metrics=['accuracy']
+        )
 
-    return model
+        return model
 
 
 def load_real_data(data_path, img_size=640):
