@@ -145,6 +145,7 @@ class SyntheticDataGenerator:
 
         self._convert_images_and_labels_to_np_arrays()
 
+
 class CreateAndTrainModel:
     def __init__(self, input_shape=(640, 640, 3)):
         self.input_shape = input_shape
@@ -157,7 +158,7 @@ class CreateAndTrainModel:
 
     def create_model(self):
         """Create the model architecture."""
-        activation_and_padding_2d = {'kernel':self.kernel_size_2D,
+        activation_and_padding_2d = {'kernel_size':self.kernel_size_2D,
                                      'activation': self.activation_2D,
                                      'padding': self.padding_2D}
         model = models.Sequential([
@@ -240,7 +241,8 @@ def main():
 
     # Create and compile the model
     print("Creating model...")
-    model = create_model()
+    ct_model = CreateAndTrainModel()
+    model = ct_model.create_model()
     model.summary()
 
     # Train the model
