@@ -5,7 +5,7 @@ Train a dummy model for puzzle piece detection.
 """
 import json
 from pathlib import Path
-from typing import Tuple
+from typing import Tuple, Optional
 
 import numpy as np
 from smart_open.utils import TextIOWrapper
@@ -71,9 +71,12 @@ def parse_arguments():
 
 
 class RealDataPrepper:
-    def __init__(self, img_dir:Path, label_dir:Path, img_size=640):
+    def __init__(self, img_dir:Optional[Path], label_dir:Optional[Path], img_size=640):
         self.img_dir = img_dir
         self.label_dir = label_dir
+        if self.img_dir is None or self.label_dir is None:
+            if self.__class__.__name__ == 'RealDataPrepper':
+                raise ValueError("img_dir and label_dir must be specified.")
         self.img_size = img_size
         self.images = []
         self.labels = []
@@ -168,8 +171,18 @@ class SyntheticDataGenerator(RealDataPrepper):
     """Generates synthetic data for training the dummy model."""
 
     def __init__(self, num_samples, img_size=640):
-        super().__init__(img_size)
+        super().__init__(img_dir=None, label_dir=None, img_size=img_size)
         self.num_samples = num_samples
+
+    # noinspection PyMethodOverriding
+    def _normalize_coordinates(self, x: int, w: int, h: int, y_pos: int):
+        # Add to detections - normalize coordinates to [0, 1]
+        # Format: [x_center, y_center, width, height, confidence]
+        x_center = (x + w / 2) / self.img_size
+        y_center = (y_pos + h / 2) / self.img_size
+        width = w / self.img_size
+        height = h / self.img_size
+        return x_center, y_center, width, height
 
     def _create_img(self):
         # Create a blank image
@@ -369,8 +382,8 @@ class GenCreateAndTrainDummyModel(CreateAndTrainModel):
         ' '.join((str(x.shape) for x in shape_tuple))
 
     def create_syn_data(self):
-        self.t_generator.create_synthetic_data()
-        self.v_generator.create_synthetic_data()
+        self.t_generator.create_data()
+        self.v_generator.create_data()
 
         self.xy_train = self.t_generator.images, self.t_generator.labels
         self.xy_val = self.v_generator.images, self.v_generator.labels
