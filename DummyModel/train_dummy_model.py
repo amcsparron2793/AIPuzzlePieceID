@@ -69,14 +69,9 @@ def parse_arguments():
 #
 #     return np.array(X), np.array(y)
 
-
-class _LabelLoaderMixin:
+class _JsonLabelLoaderMixin:
     RESULT_KEYS = ['value', 'rectanglelabels']
     VALUE_KEYS = ['x', 'y', 'width', 'height']
-
-    def __init__(self):
-        self.detections = []
-        self.label_dir: Optional[Path] = None
 
     @staticmethod
     def _convert_to_decimal(percent: float) -> float:
@@ -108,6 +103,12 @@ class _LabelLoaderMixin:
         # Assuming format: [x_center, y_center, width, height, confidence]
         final_values = [x, y, width, height, is_edge]
         return final_values
+
+
+class _LabelLoaderMixin(_JsonLabelLoaderMixin):
+    def __init__(self):
+        self.detections = []
+        self.label_dir: Optional[Path] = None
 
     def _load_from_plaintext(self, f:TextIOWrapper):
         lines = f.readlines()
@@ -143,6 +144,7 @@ class _LabelLoaderMixin:
                     raise ValueError(f"Unsupported file extension: {file_extension}")
         else:
             print(f"No labels found for {img_file}. Skipping...")
+
 
 class RealDataPrepper(_LabelLoaderMixin):
     def __init__(self, img_dir:Optional[Path],
