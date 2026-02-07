@@ -3,16 +3,15 @@ train_dummy_model.py
 
 Train a dummy model for puzzle piece detection.
 """
-import json
 from pathlib import Path
-from typing import Tuple, Optional
+from typing import Tuple
 
 import numpy as np
-from io import TextIOWrapper
-from tensorflow.keras import layers, models
 import cv2
 import argparse
 import random
+
+from TrainModel import CreateAndTrainModel, RealDataPrepper
 
 
 def parse_arguments():
@@ -27,185 +26,6 @@ def parse_arguments():
     parser.add_argument('--output', type=str, default='dummy_model.keras',
                         help='Output path for the trained model.')
     return parser.parse_args()
-
-# def load_real_data(data_path, img_size=640):
-#     """Load real training data from directory."""
-#     images_dir = os.path.join(data_path, 'images')
-#     labels_dir = os.path.join(data_path, 'labels')
-#
-#     image_files = sorted([f for f in os.listdir(images_dir) if f.endswith(('.jpg', '.jpeg', '.png'))])
-#
-#     X = []
-#     y = []
-#
-#     for img_file in image_files:
-#         # TODO: DONE
-#         # Load and preprocess image
-#         # img_path = os.path.join(images_dir, img_file)
-#         # img = cv2.imread(img_path)
-#         # img = cv2.resize(img, (img_size, img_size))
-#         # img = img / 255.0  # Normalize
-#
-#         # Load labels if they exist
-#         base_name = os.path.splitext(img_file)[0]
-#         label_path = os.path.join(labels_dir, f"{base_name}.txt")
-#
-#         detections = []
-#         if os.path.exists(label_path):
-#             with open(label_path, 'r') as f:
-#                 lines = f.readlines()
-#                 for line in lines:
-#                     values = list(map(float, line.strip().split()))
-#                     # Assuming format: [x_center, y_center, width, height, confidence]
-#                     detections.append(values)
-#
-#         # Ensure we have exactly 10 detections
-#         while len(detections) < 10:
-#             detections.append([0, 0, 0, 0, 0])
-#         detections = detections[:10]
-#
-#         X.append(img)
-#         y.append(detections)
-#
-#     return np.array(X), np.array(y)
-
-class _JsonLabelLoaderMixin:
-    RESULT_KEYS = ['value', 'rectanglelabels']
-    VALUE_KEYS = ['x', 'y', 'width', 'height']
-
-    @staticmethod
-    def _convert_to_decimal(percent: float) -> float:
-        return percent / 100.0
-
-    @classmethod
-    def _validate_result_dict(cls, result: dict):
-        if any([x for x in cls.RESULT_KEYS if x not in result]):
-            raise ValueError(f"Invalid result format: {result}")
-
-        if any([x for x in cls.VALUE_KEYS if x not in result["value"]]):
-            raise ValueError(f"Invalid value format: {result['value']}")
-        return result['value']
-
-    def _get_bounding_box_info(self, value: dict):
-        # Extract bounding box information
-        x = self._convert_to_decimal(value["x"])  # Convert from percentage to [0,1]
-        y = self._convert_to_decimal(value["y"])
-        width = self._convert_to_decimal(value["width"])
-        height = self._convert_to_decimal(value["height"])
-        return x, y, width, height
-
-    def _extract_json_info(self, result: dict):
-        value = self._validate_result_dict(result)
-        x, y, width, height = self._get_bounding_box_info(value)
-
-        # Determine if it's an edge piece
-        is_edge = 1.0 if "Edge" in value["rectanglelabels"][0] else 0.0
-        # Assuming format: [x_center, y_center, width, height, confidence]
-        final_values = [x, y, width, height, is_edge]
-        return final_values
-
-
-class _LabelLoaderMixin(_JsonLabelLoaderMixin):
-    def __init__(self):
-        self.detections = []
-        self.label_dir: Optional[Path] = None
-
-    def _load_from_plaintext(self, f:TextIOWrapper):
-        lines = f.readlines()
-        for line in lines:
-            values = list(map(float, line.strip().split()))
-            # Assuming format: [x_center, y_center, width, height, confidence]
-            self.detections.append(values)
-
-    def _load_from_json(self, f:TextIOWrapper):
-        item = json.load(f)
-        # Each image can have multiple annotation sets, but typically just one
-        for annotation_set in item["annotations"]:
-            # Each annotation set has multiple results (individual bounding boxes)
-            for result in annotation_set["result"]:
-                values = self._extract_json_info(result)
-                self.detections.append(values)
-
-    def load_labels(self, img_file:Path = None, **kwargs):
-        # Load labels if they exist
-        #base_name = os.path.splitext(img_file)[0]
-        base_name = kwargs.get('base_name', img_file.stem)
-        file_extension = kwargs.get('file_extension', '.txt')
-        label_path = Path(self.label_dir,
-                          f"{base_name}{file_extension}")
-
-        if label_path.exists():
-            with open(label_path, 'r') as f:
-                if file_extension == '.json':
-                    self._load_from_json(f)
-                elif file_extension == '.txt':
-                    self._load_from_plaintext(f)
-                else:
-                    raise ValueError(f"Unsupported file extension: {file_extension}")
-        else:
-            print(f"No labels found for {img_file}. Skipping...")
-
-
-class RealDataPrepper(_LabelLoaderMixin):
-    def __init__(self, img_dir:Optional[Path],
-                 label_dir:Optional[Path], img_size=640):
-        self.detections = []
-        super().__init__()
-        self.img_dir = img_dir
-        self.label_dir = label_dir
-        self._check_for_dirs()
-
-        self.img_size = img_size
-        self.images = []
-        self.labels = []
-
-    def _check_for_dirs(self):
-        if self.img_dir is None or self.label_dir is None:
-            if type(self) == RealDataPrepper:
-                raise ValueError("img_dir and label_dir must be specified.")
-
-    def _normalize_coordinates(self, img_path):
-        # Add to detections - normalize coordinates to [0, 1]
-        # Format: [x_center, y_center, width, height, confidence]
-        # Load and preprocess image
-        #img_path = os.path.join(images_dir, img_file)
-        img = cv2.imread(img_path)
-        img = cv2.resize(img, (self.img_size, self.img_size))
-        img = img / 255.0  # Normalize
-        return img
-
-    def _post_proc_detections(self):
-        # Ensure we have exactly 10 detections (padding with zeros if needed)
-        while len(self.detections) < 10:
-            self.detections.append([0, 0, 0, 0, 0])  # Zero-padding for unused detections
-
-        # Take only first 10 if we have more
-        self.detections = self.detections[:10]
-
-    def _convert_images_and_labels_to_np_arrays(self):
-        # Convert to numpy arrays
-        self.images = np.array(self.images, dtype=np.float32) / 255.0  # Normalize to [0, 1]
-        self.labels = np.array(self.labels, dtype=np.float32)
-
-    def _process_data(self, img_path:Path = None):
-        self._normalize_coordinates(img_path)
-
-    def create_data(self):
-        for _ in self.images:
-            self.process_entry()
-        self._convert_images_and_labels_to_np_arrays()
-
-    def process_entry(self):
-        self.detections = []
-
-        img = self._process_data()
-        self.load_labels()
-        self._post_proc_detections()
-
-        # Add to datasets
-        self.images.append(img)
-        self.labels.append(self.detections)
-
 
 
 class SyntheticDataGenerator(RealDataPrepper):
@@ -319,70 +139,6 @@ class SyntheticDataGenerator(RealDataPrepper):
         self._convert_images_and_labels_to_np_arrays()
 
 
-class CreateAndTrainModel:
-    def __init__(self, input_shape, train_xy:tuple, val_xy:tuple, **kwargs):
-        self.x_images_train, self.y_labels_train = train_xy
-        self.x_images_val, self.y_labels_val = val_xy
-        self.batch_size = kwargs.get('batch_size', 4)
-
-        self.input_shape = input_shape
-        self.activation_2D = 'relu'
-        self.activation_dense = 'sigmoid'
-        self.padding_2D = 'same'
-        self.kernel_size_2D = (3, 3)
-        self.max_pool_2D = (2, 2)
-        self.filters = 16
-
-        self.model = None
-        self.epochs = kwargs.get('epochs', 10)
-        self.model_output_path = kwargs.get('output', 'dummy_model.keras')
-
-    def create_model(self):
-        """Create the model architecture."""
-        activation_and_padding_2d = {'kernel_size':self.kernel_size_2D,
-                                     'activation': self.activation_2D,
-                                     'padding': self.padding_2D}
-        self.model = models.Sequential([
-            layers.Input(shape=self.input_shape),
-            layers.Conv2D(self.filters, **activation_and_padding_2d),
-            layers.MaxPooling2D(self.max_pool_2D),
-            layers.Conv2D(self.filters * 2, **activation_and_padding_2d),
-            layers.MaxPooling2D(self.max_pool_2D),
-            layers.Conv2D(self.filters * 4, **activation_and_padding_2d),
-            layers.GlobalAveragePooling2D(),
-            # Output layer: 10 detections with 5 values each
-            layers.Dense(10 * 5, activation=self.activation_dense),
-            layers.Reshape((10, 5))
-        ])
-
-        self.model.compile(
-            optimizer='adam',
-            loss='mse',
-            metrics=['accuracy']
-        )
-
-        return self.model
-
-    def train_model(self):
-        # Train the model
-        print(f"Training model for {self.epochs} epochs...")
-        history = self.model.fit(
-            self.x_images_train, self.y_labels_train,
-            validation_data=(self.x_images_val, self.y_labels_val),
-            epochs=self.epochs,
-            batch_size=self.batch_size,
-            verbose=1
-        )
-        return history
-
-    def save_model(self, **kwargs):
-        save_path = kwargs.get('save_path', self.model_output_path)
-        # Save the model
-        print(f"Saving model to {save_path}...")
-        self.model.save(save_path)
-        print("Training complete!")
-
-
 class GenCreateAndTrainDummyModel(CreateAndTrainModel):
     def __init__(self, input_shape=(640, 640, 3), t_num_samples=200, v_num_samples=50, **kwargs):
         self.xy_train: tuple = (None, None)
@@ -420,7 +176,7 @@ class GenCreateAndTrainDummyModel(CreateAndTrainModel):
 
     @staticmethod
     def _str_shape(shape_tuple: tuple):
-        ' '.join((str(x.shape) for x in shape_tuple))
+        return ' '.join((str(x.shape) for x in shape_tuple))
 
     def create_syn_data(self):
         self.t_generator.create_data()
