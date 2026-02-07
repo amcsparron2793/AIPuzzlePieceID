@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Tuple, Optional
 
 import numpy as np
-from smart_open.utils import TextIOWrapper
+from io import TextIOWrapper
 from tensorflow.keras import layers, models
 import cv2
 import argparse
@@ -71,16 +71,21 @@ def parse_arguments():
 
 
 class RealDataPrepper:
-    def __init__(self, img_dir:Optional[Path], label_dir:Optional[Path], img_size=640):
+    def __init__(self, img_dir:Optional[Path],
+                 label_dir:Optional[Path], img_size=640):
         self.img_dir = img_dir
         self.label_dir = label_dir
-        if self.img_dir is None or self.label_dir is None:
-            if self.__class__.__name__ == 'RealDataPrepper':
-                raise ValueError("img_dir and label_dir must be specified.")
+        self._check_for_dirs()
+
         self.img_size = img_size
         self.images = []
         self.labels = []
         self.detections = []
+
+    def _check_for_dirs(self):
+        if self.img_dir is None or self.label_dir is None:
+            if type(self) == RealDataPrepper:
+                raise ValueError("img_dir and label_dir must be specified.")
 
     def _normalize_coordinates(self, img_path):
         # Add to detections - normalize coordinates to [0, 1]
@@ -164,6 +169,10 @@ class RealDataPrepper:
                     self._load_from_json(f)
                 elif file_extension == '.txt':
                     self._load_from_plaintext(f)
+                else:
+                    raise ValueError(f"Unsupported file extension: {file_extension}")
+        else:
+            print(f"No labels found for {img_file}. Skipping...")
 
 
 
