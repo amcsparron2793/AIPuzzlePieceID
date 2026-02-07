@@ -4,13 +4,12 @@ ai_puzzle_piece_id.py
 
 Use AI to identify edge puzzle pieces in a video
 """
-from abc import abstractmethod, ABC
+from abc import abstractmethod, ABCMeta
 
 import cv2
 import numpy as np
 import argparse
 import time
-import os
 from pathlib import Path
 
 # Try to import tensorflow for model loading and inference
@@ -129,7 +128,7 @@ class VideoCapture:
             print(f"Processed {self.frame_count} frames. FPS: {fps:.2f}")
 
 
-class PuzzlePieceDetectorBase(ABC):#(VideoCapture):
+class PuzzlePieceDetectorBase(metaclass=ABCMeta):#(VideoCapture):
     def __init__(self, model, output_file, confidence, **kwargs):
         self.output_file = output_file
         self.model = model
