@@ -4,7 +4,7 @@ train_dummy_model.py
 Train a dummy model for puzzle piece detection.
 """
 
-import os
+from pathlib import Path
 from typing import Tuple
 
 import numpy as np
@@ -28,14 +28,120 @@ def parse_arguments():
     return parser.parse_args()
 
 
-class SyntheticDataGenerator:
-    """Generates synthetic data for training the dummy model."""
-    def __init__(self, num_samples=100, img_size=640):
-        self.num_samples = num_samples
+class RealDataPrepper:
+    def __init__(self, img_dir:Path, label_dir:Path, img_size=640):
+        self.img_dir = img_dir
+        self.label_dir = label_dir
         self.img_size = img_size
         self.images = []
-        self.labels = []  # detections
+        self.labels = []
         self.detections = []
+
+    def _normalize_coordinates(self, img_path):
+        # Add to detections - normalize coordinates to [0, 1]
+        # Format: [x_center, y_center, width, height, confidence]
+        # Load and preprocess image
+        #img_path = os.path.join(images_dir, img_file)
+        img = cv2.imread(img_path)
+        img = cv2.resize(img, (self.img_size, self.img_size))
+        img = img / 255.0  # Normalize
+        return img
+
+    def _post_proc_detections(self):
+        # Ensure we have exactly 10 detections (padding with zeros if needed)
+        while len(self.detections) < 10:
+            self.detections.append([0, 0, 0, 0, 0])  # Zero-padding for unused detections
+
+        # Take only first 10 if we have more
+        self.detections = self.detections[:10]
+
+    def _convert_images_and_labels_to_np_arrays(self):
+        # Convert to numpy arrays
+        self.images = np.array(self.images, dtype=np.float32) / 255.0  # Normalize to [0, 1]
+        self.labels = np.array(self.labels, dtype=np.float32)
+
+    def _process_data(self, img_path:Path = None):
+        self._normalize_coordinates(img_path)
+
+    def create_data(self):
+        for _ in self.images:
+            self.process_entry()
+
+        self._convert_images_and_labels_to_np_arrays()
+
+    def process_entry(self):
+        self.detections = []
+
+        img = self._process_data()
+        self.load_labels()
+        self._post_proc_detections()
+
+        # Add to datasets
+        self.images.append(img)
+        self.labels.append(self.detections)
+
+    def load_labels(self, img_file:Path = None):
+        # Load labels if they exist
+        #base_name = os.path.splitext(img_file)[0]
+        base_name = img_file.stem
+        label_path = Path(self.label_dir, f"{base_name}.txt")
+
+        if label_path.exists():
+            with open(label_path, 'r') as f:
+                lines = f.readlines()
+                for line in lines:
+                    values = list(map(float, line.strip().split()))
+                    # Assuming format: [x_center, y_center, width, height, confidence]
+                    self.detections.append(values)
+
+# def load_real_data(data_path, img_size=640):
+#     """Load real training data from directory."""
+#     images_dir = os.path.join(data_path, 'images')
+#     labels_dir = os.path.join(data_path, 'labels')
+#
+#     image_files = sorted([f for f in os.listdir(images_dir) if f.endswith(('.jpg', '.jpeg', '.png'))])
+#
+#     X = []
+#     y = []
+#
+#     for img_file in image_files:
+#         # TODO: DONE
+#         # Load and preprocess image
+#         # img_path = os.path.join(images_dir, img_file)
+#         # img = cv2.imread(img_path)
+#         # img = cv2.resize(img, (img_size, img_size))
+#         # img = img / 255.0  # Normalize
+#
+#         # Load labels if they exist
+#         base_name = os.path.splitext(img_file)[0]
+#         label_path = os.path.join(labels_dir, f"{base_name}.txt")
+#
+#         detections = []
+#         if os.path.exists(label_path):
+#             with open(label_path, 'r') as f:
+#                 lines = f.readlines()
+#                 for line in lines:
+#                     values = list(map(float, line.strip().split()))
+#                     # Assuming format: [x_center, y_center, width, height, confidence]
+#                     detections.append(values)
+#
+#         # Ensure we have exactly 10 detections
+#         while len(detections) < 10:
+#             detections.append([0, 0, 0, 0, 0])
+#         detections = detections[:10]
+#
+#         X.append(img)
+#         y.append(detections)
+#
+#     return np.array(X), np.array(y)
+
+
+class SyntheticDataGenerator(RealDataPrepper):
+    """Generates synthetic data for training the dummy model."""
+
+    def __init__(self, num_samples, img_size=640):
+        super().__init__(img_size)
+        self.num_samples = num_samples
 
     def _create_img(self):
         # Create a blank image
@@ -79,15 +185,6 @@ class SyntheticDataGenerator:
         # Add a border to make it look more like a puzzle piece
         cv2.rectangle(img, (x, y_pos), (x + w, y_pos + h), (0, 0, 0), 2)
 
-    def _normalize_coordinates(self, x: int, w: int, h: int, y_pos: int):
-        # Add to detections - normalize coordinates to [0, 1]
-        # Format: [x_center, y_center, width, height, confidence]
-        x_center = (x + w / 2) / self.img_size
-        y_center = (y_pos + h / 2) / self.img_size
-        width = w / self.img_size
-        height = h / self.img_size
-        return x_center, y_center, width, height
-
     def _create_and_normalize_piece(self, img):
         w, h, x, y_pos = self._get_random_size_and_pos_for_piece()
         is_edge, confidence = self._get_edge_and_confidence()
@@ -110,20 +207,23 @@ class SyntheticDataGenerator:
             x_center, y_center, width, height = coordinates
             self.detections.append([x_center, y_center, width, height, confidence])
 
-    def _post_proc_detections(self):
-        # Ensure we have exactly 10 detections (padding with zeros if needed)
-        while len(self.detections) < 10:
-            self.detections.append([0, 0, 0, 0, 0])  # Zero-padding for unused detections
+    def process_entry(self):
+        self.detections = []
 
-        # Take only first 10 if we have more
-        self.detections = self.detections[:10]
+        img = self._process_data()
 
-    def _convert_images_and_labels_to_np_arrays(self):
-        # Convert to numpy arrays
-        self.images = np.array(self.images, dtype=np.float32) / 255.0  # Normalize to [0, 1]
-        self.labels = np.array(self.labels, dtype=np.float32)
+        self._post_proc_detections()
 
-    def create_synthetic_data(self):
+        # Add to datasets
+        self.images.append(img)
+        self.labels.append(self.detections)
+
+    def _process_data(self, img_path:Path = None):
+        img, num_pieces = self._create_img()
+        self._create_pieces(num_pieces, img)
+        return img
+
+    def create_data(self):
         """
         Create synthetic data for training the dummy model.
 
@@ -132,16 +232,7 @@ class SyntheticDataGenerator:
         """
 
         for _ in range(self.num_samples):
-            self.detections = []
-            img, num_pieces = self._create_img()
-
-            self._create_pieces(num_pieces, img)
-
-            self._post_proc_detections()
-
-            # Add to datasets
-            self.images.append(img)
-            self.labels.append(self.detections)
+            self.process_entry()
 
         self._convert_images_and_labels_to_np_arrays()
 
@@ -258,47 +349,6 @@ class GenCreateAndTrainDummyModel(CreateAndTrainModel):
 
         print(f"Training data shape: {self._str_shape(self.xy_train)}")
         print(f"Validation data shape: {self._str_shape(self.xy_val)}")
-
-
-def load_real_data(data_path, img_size=640):
-    """Load real training data from directory."""
-    images_dir = os.path.join(data_path, 'images')
-    labels_dir = os.path.join(data_path, 'labels')
-
-    image_files = sorted([f for f in os.listdir(images_dir) if f.endswith(('.jpg', '.jpeg', '.png'))])
-
-    X = []
-    y = []
-
-    for img_file in image_files:
-        # Load and preprocess image
-        img_path = os.path.join(images_dir, img_file)
-        img = cv2.imread(img_path)
-        img = cv2.resize(img, (img_size, img_size))
-        img = img / 255.0  # Normalize
-
-        # Load labels if they exist
-        base_name = os.path.splitext(img_file)[0]
-        label_path = os.path.join(labels_dir, f"{base_name}.txt")
-
-        detections = []
-        if os.path.exists(label_path):
-            with open(label_path, 'r') as f:
-                lines = f.readlines()
-                for line in lines:
-                    values = list(map(float, line.strip().split()))
-                    # Assuming format: [x_center, y_center, width, height, confidence]
-                    detections.append(values)
-
-        # Ensure we have exactly 10 detections
-        while len(detections) < 10:
-            detections.append([0, 0, 0, 0, 0])
-        detections = detections[:10]
-
-        X.append(img)
-        y.append(detections)
-
-    return np.array(X), np.array(y)
 
 
 if __name__ == "__main__":
