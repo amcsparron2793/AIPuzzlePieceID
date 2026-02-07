@@ -3,11 +3,12 @@ train_dummy_model.py
 
 Train a dummy model for puzzle piece detection.
 """
-
+import json
 from pathlib import Path
 from typing import Tuple
 
 import numpy as np
+from smart_open.utils import TextIOWrapper
 from tensorflow.keras import layers, models
 import cv2
 import argparse
@@ -26,73 +27,6 @@ def parse_arguments():
     parser.add_argument('--output', type=str, default='dummy_model.keras',
                         help='Output path for the trained model.')
     return parser.parse_args()
-
-
-class RealDataPrepper:
-    def __init__(self, img_dir:Path, label_dir:Path, img_size=640):
-        self.img_dir = img_dir
-        self.label_dir = label_dir
-        self.img_size = img_size
-        self.images = []
-        self.labels = []
-        self.detections = []
-
-    def _normalize_coordinates(self, img_path):
-        # Add to detections - normalize coordinates to [0, 1]
-        # Format: [x_center, y_center, width, height, confidence]
-        # Load and preprocess image
-        #img_path = os.path.join(images_dir, img_file)
-        img = cv2.imread(img_path)
-        img = cv2.resize(img, (self.img_size, self.img_size))
-        img = img / 255.0  # Normalize
-        return img
-
-    def _post_proc_detections(self):
-        # Ensure we have exactly 10 detections (padding with zeros if needed)
-        while len(self.detections) < 10:
-            self.detections.append([0, 0, 0, 0, 0])  # Zero-padding for unused detections
-
-        # Take only first 10 if we have more
-        self.detections = self.detections[:10]
-
-    def _convert_images_and_labels_to_np_arrays(self):
-        # Convert to numpy arrays
-        self.images = np.array(self.images, dtype=np.float32) / 255.0  # Normalize to [0, 1]
-        self.labels = np.array(self.labels, dtype=np.float32)
-
-    def _process_data(self, img_path:Path = None):
-        self._normalize_coordinates(img_path)
-
-    def create_data(self):
-        for _ in self.images:
-            self.process_entry()
-
-        self._convert_images_and_labels_to_np_arrays()
-
-    def process_entry(self):
-        self.detections = []
-
-        img = self._process_data()
-        self.load_labels()
-        self._post_proc_detections()
-
-        # Add to datasets
-        self.images.append(img)
-        self.labels.append(self.detections)
-
-    def load_labels(self, img_file:Path = None):
-        # Load labels if they exist
-        #base_name = os.path.splitext(img_file)[0]
-        base_name = img_file.stem
-        label_path = Path(self.label_dir, f"{base_name}.txt")
-
-        if label_path.exists():
-            with open(label_path, 'r') as f:
-                lines = f.readlines()
-                for line in lines:
-                    values = list(map(float, line.strip().split()))
-                    # Assuming format: [x_center, y_center, width, height, confidence]
-                    self.detections.append(values)
 
 # def load_real_data(data_path, img_size=640):
 #     """Load real training data from directory."""
@@ -134,6 +68,100 @@ class RealDataPrepper:
 #         y.append(detections)
 #
 #     return np.array(X), np.array(y)
+
+
+class RealDataPrepper:
+    def __init__(self, img_dir:Path, label_dir:Path, img_size=640):
+        self.img_dir = img_dir
+        self.label_dir = label_dir
+        self.img_size = img_size
+        self.images = []
+        self.labels = []
+        self.detections = []
+
+    def _normalize_coordinates(self, img_path):
+        # Add to detections - normalize coordinates to [0, 1]
+        # Format: [x_center, y_center, width, height, confidence]
+        # Load and preprocess image
+        #img_path = os.path.join(images_dir, img_file)
+        img = cv2.imread(img_path)
+        img = cv2.resize(img, (self.img_size, self.img_size))
+        img = img / 255.0  # Normalize
+        return img
+
+    def _post_proc_detections(self):
+        # Ensure we have exactly 10 detections (padding with zeros if needed)
+        while len(self.detections) < 10:
+            self.detections.append([0, 0, 0, 0, 0])  # Zero-padding for unused detections
+
+        # Take only first 10 if we have more
+        self.detections = self.detections[:10]
+
+    def _convert_images_and_labels_to_np_arrays(self):
+        # Convert to numpy arrays
+        self.images = np.array(self.images, dtype=np.float32) / 255.0  # Normalize to [0, 1]
+        self.labels = np.array(self.labels, dtype=np.float32)
+
+    def _process_data(self, img_path:Path = None):
+        self._normalize_coordinates(img_path)
+
+    def create_data(self):
+        for _ in self.images:
+            self.process_entry()
+        self._convert_images_and_labels_to_np_arrays()
+
+    def process_entry(self):
+        self.detections = []
+
+        img = self._process_data()
+        self.load_labels()
+        self._post_proc_detections()
+
+        # Add to datasets
+        self.images.append(img)
+        self.labels.append(self.detections)
+
+    def _load_from_plaintext(self, f:TextIOWrapper):
+        lines = f.readlines()
+        for line in lines:
+            values = list(map(float, line.strip().split()))
+            # Assuming format: [x_center, y_center, width, height, confidence]
+            self.detections.append(values)
+
+    def _load_from_json(self, f:TextIOWrapper):
+        item = json.load(f)
+        # Each image can have multiple annotation sets, but typically just one
+        for annotation_set in item["annotations"]:
+            # Each annotation set has multiple results (individual bounding boxes)
+            for result in annotation_set["result"]:
+                # Extract bounding box information
+                value = result["value"]
+                x = value["x"] / 100.0  # Convert from percentage to [0,1]
+                y = value["y"] / 100.0
+                width = value["width"] / 100.0
+                height = value["height"] / 100.0
+
+                # Determine if it's an edge piece
+                is_edge = 1.0 if "Edge" in value["rectanglelabels"][0] else 0.0
+                # Assuming format: [x_center, y_center, width, height, confidence]
+                values = [x, y, width, height, is_edge]
+                self.detections.append(values)
+
+    def load_labels(self, img_file:Path = None, **kwargs):
+        # Load labels if they exist
+        #base_name = os.path.splitext(img_file)[0]
+        base_name = kwargs.get('base_name', img_file.stem)
+        file_extension = kwargs.get('file_extension', '.txt')
+        label_path = Path(self.label_dir,
+                          f"{base_name}{file_extension}")
+
+        if label_path.exists():
+            with open(label_path, 'r') as f:
+                if file_extension == '.json':
+                    self._load_from_json(f)
+                elif file_extension == '.txt':
+                    self._load_from_plaintext(f)
+
 
 
 class SyntheticDataGenerator(RealDataPrepper):
