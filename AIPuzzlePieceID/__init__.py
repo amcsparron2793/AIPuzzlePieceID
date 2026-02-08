@@ -1,2 +1,2 @@
-from AIPuzzlePieceID.mixins import VideoCapture
+from AIPuzzlePieceID.mixins import VideoCaptureMixin
 from AIPuzzlePieceID.ai_puzzle_piece_id import PuzzlePieceDetectorBase, PuzzlePieceDetectorVideo

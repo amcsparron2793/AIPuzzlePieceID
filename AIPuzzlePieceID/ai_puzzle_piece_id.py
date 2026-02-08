@@ -11,7 +11,7 @@ import numpy as np
 import argparse
 from pathlib import Path
 
-from AIPuzzlePieceID import VideoCapture
+from AIPuzzlePieceID import VideoCaptureMixin
 
 # Try to import tensorflow for model loading and inference
 try:
@@ -131,14 +131,14 @@ class PuzzlePieceDetectorBase(metaclass=ABCMeta):#(VideoCapture):
         ...
 
 
-class PuzzlePieceDetectorVideo(PuzzlePieceDetectorBase, VideoCapture):
+class PuzzlePieceDetectorVideo(PuzzlePieceDetectorBase, VideoCaptureMixin):
     def __init__(self, model, output_file, confidence, video_path, **kwargs):
         # Call both parent class initializers
-        VideoCapture.__init__(self, video_path, output_file, **kwargs)
+        VideoCaptureMixin.__init__(self, video_path, output_file, **kwargs)
         PuzzlePieceDetectorBase.__init__(self, model, output_file, confidence, **kwargs)
 
     def _process_frame(self):
-        return VideoCapture._process_frame(self)
+        return VideoCaptureMixin._process_frame(self)
 
 
 def main():

@@ -4,7 +4,7 @@ from abc import abstractmethod
 import cv2
 
 
-class VideoCapture:
+class VideoCaptureMixin:
     def __init__(self, video_path, output_file, **kwargs):
         self.output_file = output_file
         self.video_path = video_path
