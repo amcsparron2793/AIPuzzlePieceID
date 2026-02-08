@@ -11,7 +11,7 @@ import numpy as np
 import argparse
 from pathlib import Path
 
-from AIPuzzlePieceID import VideoCaptureMixin
+from AIPuzzlePieceID import VideoCaptureMixin, ImageCaptureMixin
 
 # Try to import tensorflow for model loading and inference
 try:
@@ -141,6 +141,16 @@ class PuzzlePieceDetectorVideo(PuzzlePieceDetectorBase, VideoCaptureMixin):
         return VideoCaptureMixin._process_frame(self)
 
 
+class PuzzlePieceDetectorImage(PuzzlePieceDetectorBase, ImageCaptureMixin):
+    def __init__(self, model, output_file, confidence, image_dir, **kwargs):
+        # FIXME: make sure that all of these attrs are needed
+        ImageCaptureMixin.__init__(self, image_dir=image_dir, output_dir='', output_file=output_file, **kwargs)
+        PuzzlePieceDetectorBase.__init__(self, model, output_file, confidence, **kwargs)
+
+    def _process_frame(self):
+        return ImageCaptureMixin._process_frame(self)
+
+
 def main():
     """Main function to process video and identify edge puzzle pieces."""
     args = parse_arguments()
@@ -149,10 +159,13 @@ def main():
     video_path = Path(args.video)
 
 if __name__ == "__main__":
-    PPD = PuzzlePieceDetectorVideo(model=Path('../Misc_Project_Files/dummy_model.keras'),
-                              confidence=0.5,
-                              video_path=Path('../Misc_Project_Files/TestVideo2.mp4'),
-                              output_file=Path('../Misc_Project_Files/output.mp4'),
-                              max_frames=500)
+    # PPD = PuzzlePieceDetectorVideo(model=Path('../Misc_Project_Files/dummy_model.keras'),
+    #                           confidence=0.5,
+    #                           video_path=Path('../Misc_Project_Files/TestVideo2.mp4'),
+    #                           output_file=Path('../Misc_Project_Files/output.mp4'),
+    #                           max_frames=500)
+    PPD = PuzzlePieceDetectorImage(model=Path('../Misc_Project_Files/dummy_model.keras'), confidence=0.5,
+                                   image_dir=Path('../Misc_Project_Files'),
+                                   output_file='')
     PPD.process_frames()
     #main()

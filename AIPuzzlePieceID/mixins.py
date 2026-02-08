@@ -13,7 +13,7 @@ class _BaseMixin:
         self.output_dir = Path(output_file).parent
         self.frame_count = 0
         self.start_time = None
-        self.max_frames = None
+        self.max_frames = kwargs.get('max_frames', None)
 
     def isOpened(self):
         return
@@ -58,6 +58,9 @@ class _BaseMixin:
         self.write(processed_frame)
         self._display_progress()
 
+    def _set_frame_dimensions(self):
+        ...
+
 
 class VideoCaptureMixin(_BaseMixin, metaclass=ABCMeta):
     def __init__(self, video_path, output_file, **kwargs):
@@ -82,13 +85,18 @@ class VideoCaptureMixin(_BaseMixin, metaclass=ABCMeta):
             raise AttributeError(f"Error: Could not open video file '{self.video_path}'.")
         return cap
 
-    def get_video_properties(self):
+    def _set_frame_dimensions(self):
         # Get video properties
         frame_width = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         frame_height = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        return frame_width, frame_height
+
+    def get_video_properties(self):
+        frame_width, frame_height = self._set_frame_dimensions()
         fps = self.cap.get(cv2.CAP_PROP_FPS)
         return frame_width, frame_height, fps
 
+    # noinspection PyUnresolvedReferences
     def create_video_output_writer(self):
         # Create output video writer
         fourcc = cv2.VideoWriter_fourcc(*'mp4v')
@@ -139,7 +147,7 @@ class ImageCaptureMixin(_BaseMixin, metaclass=ABCMeta):
     Simulates video-like sequential processing by iterating through a directory of images.
     """
 
-    def __init__(self, image_dir, output_dir, in_file, output_file, image_pattern="*.jpg", **kwargs):
+    def __init__(self, image_dir, output_dir, output_file, image_pattern="*.jpg", **kwargs):
         """
         Initialize the ImageCapture.
 
@@ -149,23 +157,22 @@ class ImageCaptureMixin(_BaseMixin, metaclass=ABCMeta):
             image_pattern (str): Glob pattern to filter image files (default: "*.jpg")
             **kwargs: Additional keyword arguments
         """
+        in_file = None
         super().__init__(in_file, output_file, **kwargs)
+
         self.image_dir = Path(image_dir)
         self.output_dir = Path(output_dir)
         self.image_pattern = image_pattern
-        self.frame_count = 0
-        self.start_time = None
-        self.max_frames = kwargs.get('max_frames', None)
 
-        # Get list of image files
-        self.image_files = list(self.image_dir.glob(image_pattern))
-        self.image_files.sort()  # Sort to ensure consistent order
         self.total_images = len(self.image_files)
         self.current_idx = 0
 
         # Make sure output directory exists
         Path(self.output_dir).mkdir(parents=True, exist_ok=True)
 
+        self._set_frame_dimensions()
+
+    def _set_frame_dimensions(self):
         # Get frame dimensions from first image (if available)
         if self.total_images > 0:
             sample_img = cv2.imread(str(self.image_files[0]))
@@ -175,6 +182,11 @@ class ImageCaptureMixin(_BaseMixin, metaclass=ABCMeta):
                 self.frame_width, self.frame_height = 0, 0
         else:
             self.frame_width, self.frame_height = 0, 0
+        return self.frame_width, self.frame_height
+
+    @property
+    def image_files(self):
+        return sorted(self.image_dir.glob(self.image_pattern))
 
     def _validate_file_paths(self):
         """Validate that the input directory exists and contains images."""
